@@ -7,6 +7,7 @@ from sklearn import metrics
 import torch.optim as optim
 import copy
 
+from solver import Solver
 from utils import to_gpu, time_desc_decorator, DiffLoss, MSE, SIMSE, CMD
 import models
 import os
@@ -24,23 +25,30 @@ class DatasetSplit(Dataset):
         return data_batch
 
 
-class LocalUpdate(object):
-    def __init__(self, args, dataloader=None,dataset=None, idxs=None):
-        self.args = args
+class LocalUpdate(Solver):
+    def __init__(self, args, dataloader ,dev_data_loader,test_data_loader, model, dataset=None, idxs=None, is_train=True):
+        self.train_config = args
         # self.train_loader = DataLoader(DatasetSplit(dataset, idxs), batch_size=1, shuffle=True)
         self.train_loader = dataloader
-    def train(self, net, optimizer, lr_scheduler, criterion):
-        glob_net = copy.deepcopy(net)
-        net.train()
-
+        self.loss_diff = DiffLoss()
+        self.loss_recon = MSE()
+        self.loss_cmd = CMD()
+        self.dev_data_loader = dev_data_loader
+        self.test_data_loader = test_data_loader
+        self.model = model
+        self.is_train = is_train
+    def train(self, optimizer, lr_scheduler, criterion):
+        net = self.model
+        self.criterion = criterion
         train_losses = []
-
         for e in range(2):
             train_loss_cls, train_loss_sim, train_loss_diff = [], [], []
             train_loss_recon = []
             train_loss_sp = []
             train_loss = []
             for i_batch, data_batch in enumerate(self.train_loader):
+                self.model.train()
+                net.train()
                 net.zero_grad()
                 t, v, a, y, l, bert_sent, bert_sent_type, bert_sent_mask = data_batch
                 batch_size = t.size(0)
@@ -86,10 +94,10 @@ class LocalUpdate(object):
                 train_loss_sim.append(similarity_loss.item())
                 
 
-            train_losses.append(train_loss)
+            train_losses.append(np.mean(train_loss).item())
             print(f"Training loss: {round(np.mean(train_loss), 4)}")
 
             valid_loss, valid_acc = self.eval(mode="dev")
             print(f'Validation acc: {valid_acc}')
 
-        return net.state_dict(), sum(train_losses) / len(train_losses)
+        return net.state_dict(), sum(train_losses)/len(train_losses)

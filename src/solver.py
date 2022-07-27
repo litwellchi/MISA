@@ -54,7 +54,7 @@ class Solver(object):
             
             if 'weight_hh' in name:
                 nn.init.orthogonal_(param)
-            print('\t' + name, param.requires_grad)
+            # print('\t' + name, param.requires_grad)
 
         # Initialize weight of Embedding matrix with Glove embeddings
         if not self.train_config.use_bert:

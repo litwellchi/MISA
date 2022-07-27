@@ -25,7 +25,7 @@ import copy
 
 
 
-class Solver(object):
+class FedSolver(object):
     def __init__(self, train_config, dev_config, test_config, train_data, dev_data_loader, test_data_loader, dict_users, is_train=True, model=None):
 
         self.train_config = train_config
@@ -105,13 +105,14 @@ class Solver(object):
 
         net_glob = self.model.state_dict()
 
-        idxs_users = np.random.choice(2, 1, replace=False)
+        idxs_users = np.random.choice(30, 10, replace=False)
 
         for idx in idxs_users:
 
             flag = idx % 3
-            local_train = LocalUpdate(args=self.train_config, dataloader=self.train_data[idx])
-            local_w, idxs_loss = local_train.train(net=copy.deepcopy(self.model), optimizer = self.optimizer, lr_scheduler = lr_scheduler, criterion=self.criterion)
+            local_train = LocalUpdate(args=self.train_config, dataloader=self.train_data[idx],dev_data_loader=self.dev_data_loader,test_data_loader=self.test_data_loader,model = copy.deepcopy(self.model))
+            local_train.build()
+            local_w, idxs_loss = local_train.train(optimizer = self.optimizer, lr_scheduler = lr_scheduler, criterion=self.criterion)
 
             ep_loss.append(copy.deepcopy(idxs_loss))
 
@@ -146,9 +147,9 @@ class Solver(object):
         elif mode == "test":
             dataloader = self.test_data_loader
 
-            if to_print:
-                self.model.load_state_dict(torch.load(
-                    f'checkpoints/model_{self.train_config.name}.std'))
+            # if to_print:
+            #     self.model.load_state_dict(torch.load(
+            #         f'checkpoints/model_{self.train_config.name}.std'))
             
 
         with torch.no_grad():

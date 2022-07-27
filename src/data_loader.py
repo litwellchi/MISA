@@ -2,6 +2,7 @@ import random
 import numpy as np
 from tqdm import tqdm_notebook
 from collections import defaultdict
+import pickle
 
 import torch
 import torch.nn as nn
@@ -103,3 +104,34 @@ def get_loader(config, shuffle=True):
         collate_fn=collate_fn)
 
     return data_loader
+
+def get_client_loaders(config, shuffle=True):
+    def iid_sampling(dataset, num_users):
+        """
+        Sample I.I.D. client data from MNIST dataset
+        :param dataset:
+        :param num_users:
+        :return: dict of image index
+        """
+        num_items = int(len(dataset)/num_users)
+        dict_users, all_idxs = {}, [i for i in range(len(dataset))]
+        for i in range(num_users):
+            dict_users[i] = set(np.random.choice(all_idxs, num_items, replace=False))
+            all_idxs = list(set(all_idxs) - dict_users[i])
+        return dict_users
+
+    train_loaders = {}
+
+    f = open(str(config.data_dir)+'/train_all.pkl','rb')
+    data = pickle.load(f)
+
+    user_dict = iid_sampling(data, num_users=30)
+    for idx in user_dict.keys():
+        tmp_data = []
+        for data_id in user_dict[idx]: tmp_data.append(data[data_id])
+        with open(str(config.data_dir)+'/train.pkl','wb') as f:
+            pickle.dump(tmp_data, f)
+        
+        train_loaders[idx] = get_loader(config)
+
+    return train_loaders, user_dict
