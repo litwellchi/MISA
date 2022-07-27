@@ -122,7 +122,7 @@ class FedSolver(object):
                 lc_model = copy.deepcopy(self.model)
                 train_data_loader = self.train_data[idx]
                 local_train = Solver(
-                    train_config = self.client_config, 
+                    train_config = lient_config, 
                     dev_config = None, 
                     test_config = None, 
                     train_data_loader = train_data_loader, 
