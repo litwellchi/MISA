@@ -117,10 +117,12 @@ class FedSolver(object):
                 # local_w, idxs_loss = local_train.train(optimizer = self.optimizer, lr_scheduler = lr_scheduler, criterion=self.criterion)
 
                 # ep_loss.append(copy.deepcopy(idxs_loss))
+                client_config = self.train_config
+                client_config.n_epoch = 2
                 lc_model = copy.deepcopy(self.model)
                 train_data_loader = self.train_data[idx]
                 local_train = Solver(
-                    train_config = self.train_config, 
+                    train_config = self.client_config, 
                     dev_config = None, 
                     test_config = None, 
                     train_data_loader = train_data_loader, 
