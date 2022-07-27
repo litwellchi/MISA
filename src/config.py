@@ -9,13 +9,14 @@ from torch import optim
 import torch.nn as nn
 
 # path to a pretrained word embedding file
-word_emb_path = '/home/devamanyu/glove.840B.300d.txt'
+word_emb_path = '/home/xwchi/MISA/datasets/glove.840B.300d.txt'
 assert(word_emb_path is not None)
 
 
 username = Path.home().name
 project_dir = Path(__file__).resolve().parent.parent
-sdk_dir = project_dir.joinpath('CMU-MultimodalSDK')
+# sdk_dir = project_dir.joinpath('CMU-MultimodalSDK')
+sdk_dir = "/home/xwchi/xwenv/lib/python3.8/site-packages/CMU-MultimodalSDK"
 data_dir = project_dir.joinpath('datasets')
 data_dict = {'mosi': data_dir.joinpath('MOSI'), 'mosei': data_dir.joinpath(
     'MOSEI'), 'ur_funny': data_dir.joinpath('UR_FUNNY')}
@@ -86,7 +87,7 @@ def get_config(parse=True, **optional_kwargs):
     parser.add_argument('--num_classes', type=int, default=0)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--eval_batch_size', type=int, default=10)
-    parser.add_argument('--n_epoch', type=int, default=500)
+    parser.add_argument('--n_epoch', type=int, default=10)
     parser.add_argument('--patience', type=int, default=6)
 
     parser.add_argument('--diff_weight', type=float, default=0.3)
@@ -111,7 +112,7 @@ def get_config(parse=True, **optional_kwargs):
                         default='MISA', help='one of {MISA, }')
 
     # Data
-    parser.add_argument('--data', type=str, default='mosi')
+    parser.add_argument('--data', type=str, default='mosei')
 
     # Parse arguments
     if parse:
