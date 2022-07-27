@@ -1,3 +1,6 @@
+# Config Fed MISA:
+Rename the /MOSEI/train.pkl to /MOSEI/train_all.pkl
+
 # MISA: Modality-Invariant and -Specific Representations for Multimodal Sentiment Analysis
 Code for the [ACM MM 2020](https://2020.acmmm.org) paper [MISA: Modality-Invariant and -Specific Representations for Multimodal Sentiment Analysis](https://arxiv.org/pdf/2005.03545.pdf)
 
