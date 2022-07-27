@@ -113,6 +113,8 @@ def get_config(parse=True, **optional_kwargs):
 
     # Data
     parser.add_argument('--data', type=str, default='mosei')
+    parser.add_argument('--clients', type=int, default=30)
+    parser.add_argument('--samples', type=int, default=10)
 
     # Parse arguments
     if parse:

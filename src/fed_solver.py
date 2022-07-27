@@ -1,3 +1,7 @@
+import copy
+import models
+from solver import Solver
+from utils import to_gpu, time_desc_decorator, DiffLoss, MSE, SIMSE, CMD
 import os
 import math
 from math import isnan
@@ -19,11 +23,6 @@ from torch.nn import functional as F
 torch.manual_seed(123)
 torch.cuda.manual_seed_all(123)
 
-from utils import to_gpu, time_desc_decorator, DiffLoss, MSE, SIMSE, CMD
-import models
-import copy
-
-
 
 class FedSolver(object):
     def __init__(self, train_config, dev_config, test_config, train_data, dev_data_loader, test_data_loader, dict_users, is_train=True, model=None):
@@ -36,26 +35,28 @@ class FedSolver(object):
         self.is_train = is_train
         self.model = model
         self.dict_users = dict_users
-    
+
     # @time_desc_decorator('Build Graph')
     def build(self, cuda=True):
 
         if self.model is None:
-            self.model = getattr(models, self.train_config.model)(self.train_config)
-        
+            self.model = getattr(models, self.train_config.model)(
+                self.train_config)
+
         # Final list
         for name, param in self.model.named_parameters():
 
-            # Bert freezing customizations 
+            # Bert freezing customizations
             if self.train_config.data == "mosei":
                 if "bertmodel.encoder.layer" in name:
-                    layer_num = int(name.split("encoder.layer.")[-1].split(".")[0])
+                    layer_num = int(name.split(
+                        "encoder.layer.")[-1].split(".")[0])
                     if layer_num <= (8):
                         param.requires_grad = False
             elif self.train_config.data == "ur_funny":
                 if "bert" in name:
                     param.requires_grad = False
-            
+
             if 'weight_hh' in name:
                 nn.init.orthogonal_(param)
             print('\t' + name, param.requires_grad)
@@ -65,7 +66,7 @@ class FedSolver(object):
             if self.train_config.pretrained_emb is not None:
                 self.model.embed.weight.data = self.train_config.pretrained_emb
             self.model.embed.requires_grad = False
-        
+
         if torch.cuda.is_available() and cuda:
             self.model.cuda()
 
@@ -73,7 +74,6 @@ class FedSolver(object):
             self.optimizer = self.train_config.optimizer(
                 filter(lambda p: p.requires_grad, self.model.parameters()),
                 lr=self.train_config.learning_rate)
-
 
     @time_desc_decorator('Training Start!')
     def train(self):
@@ -83,48 +83,59 @@ class FedSolver(object):
         # self.criterion = criterion = nn.L1Loss(reduction="mean")
         if self.train_config.data == "ur_funny":
             self.criterion = criterion = nn.CrossEntropyLoss(reduction="mean")
-        else: # mosi and mosei are regression dataloaders
+        else:  # mosi and mosei are regression dataloaders
             self.criterion = criterion = nn.MSELoss(reduction="mean")
-
 
         self.domain_loss_criterion = nn.CrossEntropyLoss(reduction="mean")
         self.sp_loss_criterion = nn.CrossEntropyLoss(reduction="mean")
         self.loss_diff = DiffLoss()
         self.loss_recon = MSE()
         self.loss_cmd = CMD()
-        
+
         best_valid_loss = float('inf')
-        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.5)
-        
-        train_losses = []
-        valid_losses = []
-        ep_loss = []
-        w_locals = []
+        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            self.optimizer, gamma=0.5)
 
-        self.model.train()
+        for epoch in range(self.train_config.n_epoch):
+            train_losses = []
+            valid_losses = []
+            ep_loss = []
+            w_locals = []
 
-        net_glob = self.model.state_dict()
+            self.model.train()
 
-        idxs_users = np.random.choice(30, 10, replace=False)
+            net_glob = self.model.state_dict()
 
-        for idx in idxs_users:
+            idxs_users = np.random.choice(
+                self.train_config.clients, self.train_config.samples, replace=False)
 
-            flag = idx % 3
-            local_train = LocalUpdate(args=self.train_config, dataloader=self.train_data[idx],dev_data_loader=self.dev_data_loader,test_data_loader=self.test_data_loader,model = copy.deepcopy(self.model))
-            local_train.build()
-            local_w, idxs_loss = local_train.train(optimizer = self.optimizer, lr_scheduler = lr_scheduler, criterion=self.criterion)
+            for idx in idxs_users:
 
-            ep_loss.append(copy.deepcopy(idxs_loss))
+                flag = idx % 3
+                # local_train = LocalUpdate(args=self.train_config, dataloader=self.train_data[idx],dev_data_loader=self.dev_data_loader,test_data_loader=self.test_data_loader,model = copy.deepcopy(self.model))
+                # local_train.build()
+                # local_w, idxs_loss = local_train.train(optimizer = self.optimizer, lr_scheduler = lr_scheduler, criterion=self.criterion)
 
-            w_locals.append(copy.deepcopy(local_w))
+                # ep_loss.append(copy.deepcopy(idxs_loss))
+                lc_model = copy.deepcopy(self.model)
+                train_data_loader = self.train_data[idx]
+                local_train = Solver(
+                    train_config = self.train_config, 
+                    dev_config = None, 
+                    test_config = None, 
+                    train_data_loader = train_data_loader, 
+                    dev_data_loader = self.dev_data_loader, 
+                    test_data_loader = self.test_data_loader, 
+                    is_train=True, 
+                    model=lc_model)
+                local_train.build()
+                local_train.train()
+                local_w = local_train.model.state_dict()
+                w_locals.append(copy.deepcopy(local_w))
 
-        net_glob = self.FedAvg(w_locals)
-
-        self.model.load_state_dict(net_glob)
-
-        self.eval(mode="test", to_print=True)
-
-
+            net_glob = self.FedAvg(w_locals)
+            self.model.load_state_dict(net_glob)
+            self.eval(mode="test", to_print=True)
 
     def FedAvg(self, w):
         w_avg = copy.deepcopy(w[0])
@@ -134,8 +145,7 @@ class FedSolver(object):
             w_avg[k] = torch.div(w_avg[k], len(w))
         return w_avg
 
-
-    def eval(self,mode=None, to_print=False):
+    def eval(self, mode=None, to_print=False):
         assert(mode is not None)
         self.model.eval()
 
@@ -150,7 +160,6 @@ class FedSolver(object):
             # if to_print:
             #     self.model.load_state_dict(torch.load(
             #         f'checkpoints/model_{self.train_config.name}.std'))
-            
 
         with torch.no_grad():
 
@@ -167,11 +176,12 @@ class FedSolver(object):
                 bert_sent_type = to_gpu(bert_sent_type)
                 bert_sent_mask = to_gpu(bert_sent_mask)
 
-                y_tilde = self.model(t, v, a, l, bert_sent, bert_sent_type, bert_sent_mask)
+                y_tilde = self.model(t, v, a, l, bert_sent,
+                                     bert_sent_type, bert_sent_mask)
 
                 if self.train_config.data == "ur_funny":
                     y = y.squeeze()
-                
+
                 cls_loss = self.criterion(y_tilde, y)
                 loss = cls_loss
 
@@ -202,7 +212,6 @@ class FedSolver(object):
         https://github.com/yaohungt/Multimodal-Transformer/blob/master/src/eval_metrics.py
         """
 
-
         if self.train_config.data == "ur_funny":
             test_preds = np.argmax(y_pred, 1)
             test_truth = y_true
@@ -212,28 +221,32 @@ class FedSolver(object):
                 print(confusion_matrix(test_truth, test_preds))
                 print("Classification Report (pos/neg) :")
                 print(classification_report(test_truth, test_preds, digits=5))
-                print("Accuracy (pos/neg) ", accuracy_score(test_truth, test_preds))
-            
+                print("Accuracy (pos/neg) ",
+                      accuracy_score(test_truth, test_preds))
+
             return accuracy_score(test_truth, test_preds)
 
         else:
             test_preds = y_pred
             test_truth = y_true
 
-            non_zeros = np.array([i for i, e in enumerate(test_truth) if e != 0])
+            non_zeros = np.array(
+                [i for i, e in enumerate(test_truth) if e != 0])
 
             test_preds_a7 = np.clip(test_preds, a_min=-3., a_max=3.)
             test_truth_a7 = np.clip(test_truth, a_min=-3., a_max=3.)
             test_preds_a5 = np.clip(test_preds, a_min=-2., a_max=2.)
             test_truth_a5 = np.clip(test_truth, a_min=-2., a_max=2.)
 
-            mae = np.mean(np.absolute(test_preds - test_truth))   # Average L1 distance between preds and truths
+            # Average L1 distance between preds and truths
+            mae = np.mean(np.absolute(test_preds - test_truth))
             corr = np.corrcoef(test_preds, test_truth)[0][1]
             mult_a7 = self.multiclass_acc(test_preds_a7, test_truth_a7)
             mult_a5 = self.multiclass_acc(test_preds_a5, test_truth_a5)
-            
-            f_score = f1_score((test_preds[non_zeros] > 0), (test_truth[non_zeros] > 0), average='weighted')
-            
+
+            f_score = f1_score(
+                (test_preds[non_zeros] > 0), (test_truth[non_zeros] > 0), average='weighted')
+
             # pos - neg
             binary_truth = (test_truth[non_zeros] > 0)
             binary_preds = (test_preds[non_zeros] > 0)
@@ -247,7 +260,7 @@ class FedSolver(object):
                 # print("Classification Report (pos/neg) :")
                 # print(classification_report(binary_truth, binary_preds, digits=5))
                 # print("Accuracy (pos/neg) ", accuracy_score(binary_truth, binary_preds))
-            
+
             # # non-neg - neg
             # binary_truth = (test_truth >= 0)
             # binary_preds = (test_preds >= 0)
@@ -256,15 +269,14 @@ class FedSolver(object):
             #     print("Classification Report (non-neg/neg) :")
             #     print(classification_report(binary_truth, binary_preds, digits=5))
             #     print("Accuracy (non-neg/neg) ", accuracy_score(binary_truth, binary_preds))
-            
-            return accuracy_score(binary_truth, binary_preds)
 
+            return accuracy_score(binary_truth, binary_preds)
 
     def get_domain_loss(self,):
 
         if self.train_config.use_cmd_sim:
             return 0.0
-        
+
         # Predicted domain labels
         domain_pred_t = self.model.domain_label_t
         domain_pred_v = self.model.domain_label_v
@@ -276,8 +288,10 @@ class FedSolver(object):
         domain_true_a = to_gpu(torch.LongTensor([2]*domain_pred_a.size(0)))
 
         # Stack up predictions and true labels
-        domain_pred = torch.cat((domain_pred_t, domain_pred_v, domain_pred_a), dim=0)
-        domain_true = torch.cat((domain_true_t, domain_true_v, domain_true_a), dim=0)
+        domain_pred = torch.cat(
+            (domain_pred_t, domain_pred_v, domain_pred_a), dim=0)
+        domain_true = torch.cat(
+            (domain_true_t, domain_true_v, domain_true_a), dim=0)
 
         return self.domain_loss_criterion(domain_pred, domain_true)
 
@@ -287,9 +301,12 @@ class FedSolver(object):
             return 0.0
 
         # losses between shared states
-        loss = self.loss_cmd(self.model.utt_shared_t, self.model.utt_shared_v, 5)
-        loss += self.loss_cmd(self.model.utt_shared_t, self.model.utt_shared_a, 5)
-        loss += self.loss_cmd(self.model.utt_shared_a, self.model.utt_shared_v, 5)
+        loss = self.loss_cmd(self.model.utt_shared_t,
+                             self.model.utt_shared_v, 5)
+        loss += self.loss_cmd(self.model.utt_shared_t,
+                              self.model.utt_shared_a, 5)
+        loss += self.loss_cmd(self.model.utt_shared_a,
+                              self.model.utt_shared_v, 5)
         loss = loss/3.0
 
         return loss
@@ -314,7 +331,7 @@ class FedSolver(object):
         loss += self.loss_diff(private_t, private_v)
 
         return loss
-    
+
     def get_recon_loss(self, ):
 
         loss = self.loss_recon(self.model.utt_t_recon, self.model.utt_t_orig)
@@ -322,8 +339,3 @@ class FedSolver(object):
         loss += self.loss_recon(self.model.utt_a_recon, self.model.utt_a_orig)
         loss = loss/3.0
         return loss
-
-
-
-
-

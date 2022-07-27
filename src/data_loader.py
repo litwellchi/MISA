@@ -125,7 +125,7 @@ def get_client_loaders(config, shuffle=True):
     f = open(str(config.data_dir)+'/train_all.pkl','rb')
     data = pickle.load(f)
 
-    user_dict = iid_sampling(data, num_users=30)
+    user_dict = iid_sampling(data, num_users=config.clients)
     for idx in user_dict.keys():
         tmp_data = []
         for data_id in user_dict[idx]: tmp_data.append(data[data_id])
