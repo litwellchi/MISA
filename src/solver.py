@@ -2,8 +2,6 @@ import os
 import math
 from math import isnan
 import re
-import pickle
-import gensim
 import numpy as np
 from tqdm import tqdm
 from tqdm import tqdm_notebook
@@ -23,7 +21,7 @@ import models
 
 
 class Solver(object):
-    def __init__(self, train_config, dev_config, test_config, train_data_loader, dev_data_loader, test_data_loader, is_train=True, model=None):
+    def __init__(self, train_config, dev_config, test_config, train_data_loader, dev_data_loader, test_data_loader, is_train=True, model=None,flag=None):
 
         self.train_config = train_config
         self.epoch_i = 0
@@ -32,6 +30,7 @@ class Solver(object):
         self.test_data_loader = test_data_loader
         self.is_train = is_train
         self.model = model
+        self.flag = flag
     
     @time_desc_decorator('Build Graph')
     def build(self, cuda=True):
@@ -105,6 +104,18 @@ class Solver(object):
                 self.model.zero_grad()
                 t, v, a, y, l, bert_sent, bert_sent_type, bert_sent_mask = batch
 
+                if self.flag is 0:
+                    t = t
+                    v = t.resize(t.shape[0],t.shape[1],1).repeat(1,1,v.shape[-1]).to(torch.float32)
+                    a = t.resize(t.shape[0],t.shape[1],1).repeat(1,1,a.shape[-1]).to(torch.float32)
+                elif self.flag is 1:
+                    t = v[:,:,-1].to(torch.int64)
+                    v = v
+                    a = t.resize(t.shape[0],t.shape[1],1).repeat(1,1,a.shape[-1]).to(torch.float32)
+                elif self.flag is 2:
+                    t = a[:,:,-1].to(torch.int64)
+                    v = t.resize(t.shape[0],t.shape[1],1).repeat(1,1,v.shape[-1]).to(torch.float32)
+                    a = a
                 batch_size = t.size(0)
                 t = to_gpu(t)
                 v = to_gpu(v)

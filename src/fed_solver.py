@@ -111,7 +111,7 @@ class FedSolver(object):
 
             for idx in idxs_users:
 
-                flag = idx % 3
+                flag = np.random.choice(3)
                 # local_train = LocalUpdate(args=self.train_config, dataloader=self.train_data[idx],dev_data_loader=self.dev_data_loader,test_data_loader=self.test_data_loader,model = copy.deepcopy(self.model))
                 # local_train.build()
                 # local_w, idxs_loss = local_train.train(optimizer = self.optimizer, lr_scheduler = lr_scheduler, criterion=self.criterion)
@@ -129,7 +129,8 @@ class FedSolver(object):
                     dev_data_loader = self.dev_data_loader, 
                     test_data_loader = self.test_data_loader, 
                     is_train=True, 
-                    model=lc_model)
+                    model=lc_model,
+                    flag=flag)
                 local_train.build()
                 local_train.train()
                 local_w = local_train.model.state_dict()
